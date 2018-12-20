@@ -25,6 +25,7 @@ import time
 
 # PMB extra imports for video processing
 import numpy as np
+import json
 
 from caffe2.python import workspace
 
@@ -106,21 +107,60 @@ def main(args):
     videofile = args.video
     cap = cv2.VideoCapture(videofile)
 
-    fps = cap.get(cv2.CAP_PROP_FPS) # Gets the frames per second
-    multiplier = int(round(fps)) 
+    figuresFilename = '.'.join(videofile.split('.')[0:-1]) + "_figures.json"
+
+    targetFramerate = 30
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    print("Input FPS",fps)
+
+    if (targetFramerate > fps):
+        targetFramerate = fps
+
+    print("Target output frame rate:",targetFramerate)
+
+    skipRatio = int(round(float(fps) / float(targetFramerate)))   
+
+    outputFrameDuration = 1 / float(targetFramerate) # .0333333 ...
+    sourceFrameDuration = 1 / float(fps) # .016672224 ...
+
+    with open(figuresFilename, "w") as figuresFile:
+        figuresFile.write("[\n")
+    figuresFile.close()
+
+    firstFrame = True
 
     if (cap.isOpened()== False):
         print("Error opening video stream or file")
         sys.exit(1)
+
+    outputTimecode = 0
+    sourceTimecode = 0
+
+    frameCount = 0
 
     i = 0
 
     while(cap.isOpened()):
         ret_val, im = cap.read()
 
+        frameCount += 1
+
+        sourceTimecode += sourceFrameDuration
+
         frameId = int(round(cap.get(1)))
 
-        print("frameID",frameId,"multiplier",multiplier)
+        if ((frameCount % skipRatio) != 0):
+
+            if ((sourceTimecode - outputTimecode) > outputFrameDuration):
+                print("sourceTimecode",sourceTimecode,"outputTimecode",outputTimecode,"outputFrameDuration",outputFrameDuration,"not skipping")
+            else:
+                print("skipping frame",frameId,"count",frameCount,"skip rato",skipRatio)
+                continue
+
+        print("processing frame",frameId,"count",frameCount)
+
+        outputTimecode += outputFrameDuration
 
         fps_time = time.time()
 
@@ -148,6 +188,10 @@ def main(args):
             )
         i += 1
 
+        timeFigures = {}
+
+
+        """ 
         vis_utils.vis_only_figure(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
@@ -175,7 +219,18 @@ def main(args):
             thresh=0.7,
             kp_thresh=2
         )
-        """
+
+        figures = []
+
+        timeFigures[str(outputTimecode)] = figures
+
+        with open(figuresFilename, "a") as figuresFile:
+            outStr = json.dumps(timeFigures)
+            if (not firstFrame):
+                figuresFile.write("," + outStr + "\n")
+            else:
+                figuresFile.write(outStr + "\n")
+                firstFrame = False
 
         #cv2.putText(im,
         #            "FPS: %f" % (1.0 / (time.time() - fps_time)),
@@ -186,6 +241,9 @@ def main(args):
 
         #fps_time = time.time()
     cv2.destroyAllWindows()
+
+    with open(figuresFilename, "a") as figuresFile:
+        figuresFile.write("]")
 
 if __name__ == '__main__':
     workspace.GlobalInit(['caffe2', '--caffe2_log_level=0'])
