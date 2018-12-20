@@ -26,6 +26,7 @@ import time
 # PMB extra imports for video processing
 import numpy as np
 import json
+import pycocotools.mask as mask_util
 
 from caffe2.python import workspace
 
@@ -39,6 +40,7 @@ import detectron.core.test_engine as infer_engine
 import detectron.datasets.dummy_datasets as dummy_datasets
 import detectron.utils.c2 as c2_utils
 import detectron.utils.vis as vis_utils
+import detectron.utils.keypoints as keypoint_utils
 
 c2_utils.import_detectron_ops()
 
@@ -89,6 +91,21 @@ def parse_args():
         sys.exit(1)
     return parser.parse_args()
 
+# PMB
+def mask_to_polygon(mask):
+    mask_new, contours, hierarchy = cv2.findContours((mask).astype(np.uint8), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+    # before opencv 3.2
+    # contours, hierarchy = cv2.findContours((mask).astype(np.uint8), cv2.RETR_TREE,
+    #                                                    cv2.CHAIN_APPROX_SIMPLE)
+    segmentation = []
+
+    for contour in contours:
+        contour = contour.flatten().tolist()
+        segmentation.append(contour)
+        #if len(contour) > 4:
+        #    segmentation.append(contour)
+
+    return segmentation
 
 def main(args):
     logger = logging.getLogger(__name__)
@@ -107,9 +124,14 @@ def main(args):
     videofile = args.video
     cap = cv2.VideoCapture(videofile)
 
+    dataset_keypoints, _ = keypoint_utils.get_keypoints()
+    kp_lines = vis_utils.kp_connections(dataset_keypoints)
+
     figuresFilename = '.'.join(videofile.split('.')[0:-1]) + "_figures.json"
+    print("figures JSON file is",figuresFilename)
 
     targetFramerate = 30
+    thresh = .9 # minimum likelihood threshold for a box
 
     fps = cap.get(cv2.CAP_PROP_FPS)
     print("Input FPS",fps)
@@ -166,7 +188,7 @@ def main(args):
 
         im_name = str(fps_time)
         
-        out_name = os.path.join(
+        out_path = os.path.join(
             args.output_dir, '{}'.format(im_name + '.jpg')
         )
 
@@ -175,9 +197,8 @@ def main(args):
         timers = defaultdict(Timer)
         t = time.time()
         with c2_utils.NamedCudaScope(0):
-            cls_boxes, cls_segms, cls_keyps, cls_bodys = infer_engine.im_detect_all(
-                model, im, None, timers=timers
-            )
+            cls_boxes, cls_segms, cls_keyps, cls_bodys = infer_engine.im_detect_all(model, im, None, timers=timers)
+
         logger.info('Inference time: {:.3f}s'.format(time.time() - t))
         for k, v in timers.items():
             logger.info(' | {}: {:.3f}s'.format(k, v.average_time))
@@ -188,14 +209,76 @@ def main(args):
             )
         i += 1
 
-        timeFigures = {}
+        figBoxes = []
+        figOutlines = []
+        figKeypoints = []
 
+        boxes, segms, keyps, classes = vis_utils.convert_from_cls_format(cls_boxes, cls_segms, cls_keyps)
 
-        """ 
+        if ((boxes is not None) and (boxes.shape[0] != 0) and (max(boxes[:, 4]) >= thresh)):
+            if (len(boxes) != len(segms) != len(keyps)):
+                print("WARNING: Different numbers of boxes, segment masks, and keypoint sets")
+                print(len(boxes),len(segms), len(keyps))
+
+            for bodyi in range(0,len(boxes)):
+                box = boxes[bodyi]
+                score = box[-1]
+                if (score < thresh):
+                    continue
+
+                figBoxes.append([str(box[0]), str(box[1]), str(box[2]), str(box[3])])
+                if (len(segms) > bodyi):
+                    seg = segms[bodyi]
+
+                    # PMB This code converts the segmentation mask into a
+                    # regular (bitmap) mask, and then converts the mask into
+                    # a polygon that "lassos" (or outlines) the region -- but
+                    # both of these representations are rather cumbersome.
+                    # This is why COCO uses the weird segmentation mask format
+                    # (technically it's "compressed RLE") in the first place.
+                    # So we'll keep using it for now.
+
+                    #segHeight = int(seg['size'][0])
+                    #segWidth = int(seg['size'][1])
+                    #segMask = mask_util.decode(seg)
+
+                    #segPolygon = mask_to_polygon(segMask.copy())[0]
+                    #thisPolygon = []
+                    #for a,b in zip(segPolygon[0::2], segPolygon[1::2]):
+                    #    thisPolygon.append([str(a), str(b)])
+                    #figOutlines.append(thisPolygon)
+                    
+                    figOutlines.append(str(seg))
+
+                if (len(keyps) > bodyi):
+                    keypts = keyps[bodyi]
+                    print("Keypoints shape is",str(keypts.shape))
+                    keypXs = keypts[0]
+                    keypYs = keypts[1]
+                    if (len(keypXs) != len(keypYs)):
+                      print("WARNING: different length of keypoint X and Y coord rows:",len(keypXs),len(keypYs))
+                   
+                    keypointInfo = {}
+                    for kpi in range(0, len(keypXs)):
+                      kpname = dataset_keypoints[kpi]
+                      keypointInfo[kpname] = [str(keypXs[kpi]), str(keypYs[kpi])]
+
+                    figKeypoints.append(keypointInfo)
+
+        timeFigures = {str(outputTimecode): {'boxes': figBoxes, 'outlines': figOutlines, 'keypoints': figKeypoints}}
+
+        with open(figuresFilename, "a") as figuresFile:
+            outStr = json.dumps(timeFigures)
+            if (not firstFrame):
+                figuresFile.write("," + outStr + "\n")
+            else:
+                figuresFile.write(outStr + "\n")
+                firstFrame = False
+
         vis_utils.vis_only_figure(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
-            out_name,
+            out_path,
             cls_boxes,
             cls_segms,
             cls_keyps,
@@ -219,18 +302,7 @@ def main(args):
             thresh=0.7,
             kp_thresh=2
         )
-
-        figures = []
-
-        timeFigures[str(outputTimecode)] = figures
-
-        with open(figuresFilename, "a") as figuresFile:
-            outStr = json.dumps(timeFigures)
-            if (not firstFrame):
-                figuresFile.write("," + outStr + "\n")
-            else:
-                figuresFile.write(outStr + "\n")
-                firstFrame = False
+        """
 
         #cv2.putText(im,
         #            "FPS: %f" % (1.0 / (time.time() - fps_time)),
