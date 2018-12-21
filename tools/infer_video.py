@@ -17,6 +17,7 @@ from __future__ import unicode_literals
 from collections import defaultdict
 import argparse
 import cv2  # NOQA (Must import before importing caffe2 due to bug in cv2)
+import imageio
 import glob
 import logging
 import os
@@ -114,27 +115,41 @@ def main(args):
     cfg.NUM_GPUS = 1
     args.weights = cache_url(args.weights, cfg.DOWNLOAD_CACHE)
     assert_and_infer_cfg(cache_urls=False)
-    model = infer_engine.initialize_model_from_cfg(args.weights)
     dummy_coco_dataset = dummy_datasets.get_coco_dataset()
+    model = infer_engine.initialize_model_from_cfg(args.weights)
 
     if (not os.path.isfile(args.video)):
         print("Unable to find video",args.video)
         sys.exit(1)
 
     videofile = args.video
-    cap = cv2.VideoCapture(videofile)
+    #cap = cv2.VideoCapture(videofile)
+    #cap = Video(fideofile)
+    cap = imageio.get_reader(videofile, 'ffmpeg')
+    metadata = cap.get_meta_data()
+    print(str(metadata))
+
+    print("series length",cap.get_length())
+
+    #total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    #total_frames = int(cap.frame_count())
+    total_frames = int(metadata['nframes'])
 
     dataset_keypoints, _ = keypoint_utils.get_keypoints()
     kp_lines = vis_utils.kp_connections(dataset_keypoints)
 
-    figuresFilename = '.'.join(videofile.split('.')[0:-1]) + "_figures.json"
+    figuresFilename = 'DensePoseData/figuresJSON/' + '.'.join(os.path.basename(videofile).replace('video-','').split('.')[0:-1]) + "_figures.json"
     print("figures JSON file is",figuresFilename)
 
     targetFramerate = 30
     thresh = .9 # minimum likelihood threshold for a box
 
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    print("Input FPS",fps)
+    #fps = cap.get(cv2.CAP_PROP_FPS)
+    fps = metadata['fps']
+    calcfps = float(total_frames) / float(metadata['duration'])
+    print("fps and calcpfs",fps,calcfps)
+
+    #print("Input FPS",fps)
 
     if (targetFramerate > fps):
         targetFramerate = fps
@@ -152,9 +167,9 @@ def main(args):
 
     firstFrame = True
 
-    if (cap.isOpened()== False):
-        print("Error opening video stream or file")
-        sys.exit(1)
+    #if (cap.isOpened() == False):
+    #    print("Error opening video stream or file")
+    #    sys.exit(1)
 
     outputTimecode = 0
     sourceTimecode = 0
@@ -163,14 +178,23 @@ def main(args):
 
     i = 0
 
-    while(cap.isOpened()):
-        ret_val, im = cap.read()
+    #while(cap.isOpened() and (frameCount <= total_frames)):
+    #for i in np.arange(total_frames):
+    #for i, im in cap.iter_data():
+    #for i, im in enumerate(cap):
+    for i in range(0, total_frames):
+        #ret_val, im = cap.read()
+        #im = cap.get_index_frame(i)
+        im = cap.get_data(i)
+
+        imHeight, imWidth, imChannels = im.shape
 
         frameCount += 1
 
         sourceTimecode += sourceFrameDuration
 
-        frameId = int(round(cap.get(1)))
+        #frameId = int(round(cap.get(1)))
+        frameId = i
 
         if ((frameCount % skipRatio) != 0):
 
@@ -186,7 +210,8 @@ def main(args):
 
         fps_time = time.time()
 
-        im_name = str(fps_time)
+        #im_name = str(fps_time)
+        im_name = str(outputTimecode) 
         
         out_path = os.path.join(
             args.output_dir, '{}'.format(im_name + '.jpg')
@@ -207,7 +232,7 @@ def main(args):
                 ' \ Note: inference on the first image will be slower than the '
                 'rest (caches and auto-tuning need to warm up)'
             )
-        i += 1
+        #ii += 1
 
         figBoxes = []
         figOutlines = []
@@ -284,7 +309,7 @@ def main(args):
             cls_keyps,
             cls_bodys,
             dataset=dummy_coco_dataset,
-            box_alpha=0.3,
+            box_alpha=0.5,
             show_class=True
         )
         """
@@ -312,7 +337,7 @@ def main(args):
         #cv2.imwrite(out_name, kp_img)
 
         #fps_time = time.time()
-    cv2.destroyAllWindows()
+    #cv2.destroyAllWindows()
 
     with open(figuresFilename, "a") as figuresFile:
         figuresFile.write("]")

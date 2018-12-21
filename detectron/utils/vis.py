@@ -554,41 +554,35 @@ def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, bo
                 plt.setp(
                     line, color=colors[len(kp_lines) + 1], linewidth=1.0,
                     alpha=0.7)
-                
-    #   DensePose Visualization Starts!!
-    fig.savefig(out_path, dpi=dpi)
 
-    # Don't do this other stuff
-    ##  Get full IUV image out 
-    #IUV_fields = body_uv[1]
-    #
-    #All_Coords = np.zeros(im.shape)
-    #All_inds = np.zeros([im.shape[0],im.shape[1]])
-    #K = 26
-    ##
-    #inds = np.argsort(boxes[:,4])
-    ##
-    #for i, ind in enumerate(inds):
-    #    entry = boxes[ind,:]
-    #    if entry[4] > 0.65:
-    #        entry=entry[0:4].astype(int)
-    #        ####
-    #        output = IUV_fields[ind]
-    #        ####
-    #        All_Coords_Old = All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]
-    #        All_Coords_Old[All_Coords_Old==0]=output.transpose([1,2,0])[All_Coords_Old==0]
-    #        All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]= All_Coords_Old
-    #        ###
-    #        CurrentMask = (output[0,:,:]>0).astype(np.float32)
-    #        All_inds_old = All_inds[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2]]
-    #        All_inds_old[All_inds_old==0] = CurrentMask[All_inds_old==0]*i
-    #        All_inds[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2]] = All_inds_old
-    #
-    #All_Coords[:,:,1:3] = 255. * All_Coords[:,:,1:3]
-    #All_Coords[All_Coords>255] = 255.
-    #All_Coords = All_Coords.astype(np.uint8)
-    #All_inds = All_inds.astype(np.uint8)
-    #
+    #  Get full IUV image out 
+    IUV_fields = body_uv[1]
+    
+    All_Coords = np.zeros(im.shape)
+    All_inds = np.zeros([im.shape[0],im.shape[1]])
+    K = 26
+    inds = np.argsort(boxes[:,4])
+    for i, ind in enumerate(inds):
+        entry = boxes[ind,:]
+        if entry[4] > 0.65:
+            entry=entry[0:4].astype(int)
+            ####
+            output = IUV_fields[ind]
+            ####
+            All_Coords_Old = All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]
+            All_Coords_Old[All_Coords_Old==0]=output.transpose([1,2,0])[All_Coords_Old==0]
+            All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]= All_Coords_Old
+            ###
+            CurrentMask = (output[0,:,:]>0).astype(np.float32)
+            All_inds_old = All_inds[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2]]
+            All_inds_old[All_inds_old==0] = CurrentMask[All_inds_old==0]*i
+            All_inds[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2]] = All_inds_old
+    
+    All_Coords[:,:,1:3] = 255. * All_Coords[:,:,1:3]
+    All_Coords[All_Coords>255] = 255.
+    All_Coords = All_Coords.astype(np.uint8)
+    All_inds = All_inds.astype(np.uint8)
+    
     #IUV_SaveName = os.path.basename(im_name).split('.')[0]+'_IUV.png'
     #INDS_SaveName = os.path.basename(im_name).split('.')[0]+'_INDS.png'
     #cv2.imwrite(os.path.join(output_dir, '{}'.format(IUV_SaveName)), All_Coords )
@@ -599,3 +593,16 @@ def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, bo
     #
     #output_name = os.path.basename(im_name) + '.' + ext
     #fig.savefig(os.path.join(output_dir, '{}'.format(output_name)), dpi=dpi)
+    fig.savefig(out_path, dpi=dpi)
+    plt.close('all')
+    theFig = cv2.imread(out_path)
+    IUVoverlay = theFig.copy()
+    INDSoverlay = theFig.copy()
+
+    cv2.addWeighted(IUVoverlay, 0.25, theFig, .75, 0, theFig)
+    cv2.addWeighted(INDSoverlay, 0.25, theFig, .75, 0, theFig)
+
+    cv2.imwrite(out_path, theFig)
+
+
+
