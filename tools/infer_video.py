@@ -28,6 +28,7 @@ import time
 import numpy as np
 import json
 import pycocotools.mask as mask_util
+import joblib
 
 from caffe2.python import workspace
 
@@ -123,17 +124,22 @@ def main(args):
         sys.exit(1)
 
     videofile = args.video
-    #cap = cv2.VideoCapture(videofile)
+    videoID = os.path.basename(videofile).split('.')[0].replace('video-','')
+
+    if (not os.path.isdir('DensePoseData/figuresRawOutput/' + videoID)):
+        os.mkdir('DensePoseData/figuresRawOutput/' + videoID)
+
+    cap = cv2.VideoCapture(videofile)
     #cap = Video(fideofile)
-    cap = imageio.get_reader(videofile, 'ffmpeg')
-    metadata = cap.get_meta_data()
-    print(str(metadata))
+    #cap = imageio.get_reader(videofile, 'ffmpeg')
+    #metadata = cap.get_meta_data()
+    #print(str(metadata))
 
-    print("series length",cap.get_length())
+    #print("series length",cap.get_length())
 
-    #total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     #total_frames = int(cap.frame_count())
-    total_frames = int(metadata['nframes'])
+    #total_frames = int(metadata['nframes'])
 
     dataset_keypoints, _ = keypoint_utils.get_keypoints()
     kp_lines = vis_utils.kp_connections(dataset_keypoints)
@@ -144,10 +150,10 @@ def main(args):
     targetFramerate = 30
     thresh = .9 # minimum likelihood threshold for a box
 
-    #fps = cap.get(cv2.CAP_PROP_FPS)
-    fps = metadata['fps']
-    calcfps = float(total_frames) / float(metadata['duration'])
-    print("fps and calcpfs",fps,calcfps)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    #fps = metadata['fps']
+    #calcfps = float(total_frames) / float(metadata['duration'])
+    #print("fps and calcpfs",fps,calcfps)
 
     #print("Input FPS",fps)
 
@@ -178,14 +184,14 @@ def main(args):
 
     i = 0
 
-    #while(cap.isOpened() and (frameCount <= total_frames)):
+    while(cap.isOpened() and (frameCount <= total_frames)):
     #for i in np.arange(total_frames):
     #for i, im in cap.iter_data():
     #for i, im in enumerate(cap):
-    for i in range(0, total_frames):
-        #ret_val, im = cap.read()
+    #for i in range(0, total_frames):
+        ret_val, im = cap.read()
         #im = cap.get_index_frame(i)
-        im = cap.get_data(i)
+        #im = cap.get_data(i)
 
         imHeight, imWidth, imChannels = im.shape
 
@@ -193,8 +199,8 @@ def main(args):
 
         sourceTimecode += sourceFrameDuration
 
-        #frameId = int(round(cap.get(1)))
-        frameId = i
+        frameId = int(round(cap.get(1)))
+        #frameId = i
 
         if ((frameCount % skipRatio) != 0):
 
@@ -211,11 +217,13 @@ def main(args):
         fps_time = time.time()
 
         #im_name = str(fps_time)
-        im_name = str(outputTimecode) 
+        im_name = str(outputTimecode) + "_" + str(frameId) + "_" + videoID
         
         out_path = os.path.join(
             args.output_dir, '{}'.format(im_name + '.jpg')
         )
+        
+        datafile_name = 'DensePoseData/figuresRawOutput/' + videoID + '/' + str(outputTimecode) + "_" + str(frameId) + "_" + videoID + '.joblib'
 
         logger.info('Processing {}'.format(im_name))
         
@@ -232,7 +240,9 @@ def main(args):
                 ' \ Note: inference on the first image will be slower than the '
                 'rest (caches and auto-tuning need to warm up)'
             )
-        #ii += 1
+        i += 1
+
+        joblib.dump([cls_boxes, cls_segms, cls_keyps, cls_bodys], datafile_name, compress=True)
 
         figBoxes = []
         figOutlines = []
@@ -290,7 +300,7 @@ def main(args):
 
                     figKeypoints.append(keypointInfo)
 
-        timeFigures = {str(outputTimecode): {'boxes': figBoxes, 'outlines': figOutlines, 'keypoints': figKeypoints}}
+        timeFigures = {str(outputTimecode): {'frameID': str(frameId), 'boxes': figBoxes, 'outlines': figOutlines, 'keypoints': figKeypoints}}
 
         with open(figuresFilename, "a") as figuresFile:
             outStr = json.dumps(timeFigures)
@@ -299,7 +309,7 @@ def main(args):
             else:
                 figuresFile.write(outStr + "\n")
                 firstFrame = False
-
+        """
         vis_utils.vis_only_figure(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
@@ -312,6 +322,9 @@ def main(args):
             box_alpha=0.5,
             show_class=True
         )
+        """
+
+
         """
         vis_utils.vis_one_image(
             im[:, :, ::-1],  # BGR -> RGB for visualization
