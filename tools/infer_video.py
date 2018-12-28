@@ -17,7 +17,6 @@ from __future__ import unicode_literals
 from collections import defaultdict
 import argparse
 import cv2  # NOQA (Must import before importing caffe2 due to bug in cv2)
-import imageio
 import glob
 import logging
 import os
@@ -184,7 +183,7 @@ def main(args):
 
     i = 0
 
-    while(cap.isOpened() and (frameCount <= total_frames)):
+    while(cap.isOpened() and (frameCount < total_frames)):
     #for i in np.arange(total_frames):
     #for i, im in cap.iter_data():
     #for i, im in enumerate(cap):
@@ -352,6 +351,7 @@ def main(args):
         #fps_time = time.time()
     #cv2.destroyAllWindows()
 
+    cap.release()
     with open(figuresFilename, "a") as figuresFile:
         figuresFile.write("]")
 
