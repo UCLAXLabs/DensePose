@@ -21,6 +21,9 @@ import pycocotools.mask as mask_util
 from detectron.utils.colormap import colormap
 import detectron.utils.env as envu
 import detectron.utils.keypoints as keypoint_utils
+import detectron.utils.densepose_methods as dp_utils
+
+DP = dp_utils.DensePoseMethods()
 
 # Matplotlib requires certain adjustments in some environments
 # Must happen before importing matplotlib
@@ -239,21 +242,29 @@ def vis_one_image_opencv(
 
     return im
 
-
+# PMB modified as well
 def vis_one_image(
-        im, im_name, output_dir, boxes, segms=None, keypoints=None, body_uv=None, thresh=0.9,
+        im, im_name, out_path, boxes, segms=None, keypoints=None, body_uv=None, thresh=0.9,
         kp_thresh=2, dpi=200, box_alpha=0.0, dataset=None, show_class=False,
         ext='pdf'):
 
     """Visual debugging of detections."""
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    #if not os.path.exists(output_dir):
+    #    os.makedirs(output_dir)
 
     if isinstance(boxes, list):
         boxes, segms, keypoints, classes = convert_from_cls_format(
             boxes, segms, keypoints)
 
+    fig = plt.figure(frameon=False)
+    fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
+    ax = plt.Axes(fig, [0., 0., 1., 1.])
+    ax.axis('off')
+    fig.add_axes(ax)
+    ax.imshow(im)
+
     if boxes is None or boxes.shape[0] == 0 or max(boxes[:, 4]) < thresh:
+        fig.savefig(out_path, dpi=dpi)
         return
 
     dataset_keypoints, _ = keypoint_utils.get_keypoints()
@@ -266,13 +277,6 @@ def vis_one_image(
     kp_lines = kp_connections(dataset_keypoints)
     cmap = plt.get_cmap('rainbow')
     colors = [cmap(i) for i in np.linspace(0, 1, len(kp_lines) + 2)]
-
-    fig = plt.figure(frameon=False)
-    fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
-    ax = plt.Axes(fig, [0., 0., 1., 1.])
-    ax.axis('off')
-    fig.add_axes(ax)
-    ax.imshow(im)
 
     # Display in largest to smallest order to reduce occlusion
     areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -304,7 +308,7 @@ def vis_one_image(
                 color='white')
 
         # show mask
-        if segms is not None and len(segms) > i:
+        if segms is not None and len(segms) > i and False:
             img = np.ones(im.shape)
             color_mask = color_list[mask_color_id % len(color_list), 0:3]
             mask_color_id += 1
@@ -379,7 +383,9 @@ def vis_one_image(
                 
     #   DensePose Visualization Starts!!
     ##  Get full IUV image out 
+    print("body_uv length",len(body_uv))
     IUV_fields = body_uv[1]
+    print("IUV_fields length",len(IUV_fields))
     #
     All_Coords = np.zeros(im.shape)
     All_inds = np.zeros([im.shape[0],im.shape[1]])
@@ -387,18 +393,41 @@ def vis_one_image(
     ##
     inds = np.argsort(boxes[:,4])
     ##
+    print("inds shape",inds.shape)
+    # Loop through top "body" candidates
     for i, ind in enumerate(inds):
+        print("ind is",ind)
+        #if (ind != 0):
+        #    continue
+
         entry = boxes[ind,:]
+        # Loop through the mesh patches on the bodies?
+        # See https://github.com/facebookresearch/DensePose/blob/master/challenge/2018_COCO_DensePose/data_format.md
+        # 1, 2 = Torso, 3 = Right Hand, 4 = Left Hand, 5 = Left Foot, 6 = Right Foot, 7, 9 = Upper Leg Right, 8, 10 = Upper Leg Left, 11, 13 = Lower Leg Right, 12, 14 = Lower Leg Left, 15, 17 = Upper Arm Left, 16, 18 = Upper Arm Right, 19, 21 = Lower Arm Left, 20, 22 = Lower Arm Right, 23, 24 = Head
+        # Consider using scipy.ndimage.measurements.center_of_mass() to find
+        # center point of hand masks (maybe others)
+
         if entry[4] > 0.65:
             entry=entry[0:4].astype(int)
             ####
             output = IUV_fields[ind]
+            print("shape of IUV_fields for this body:",output.shape)
+            print("Shape of output[0]",output[0].shape)
+            print("Shape of output[1]",output[1].shape)
+            print("Shape of output[2]",output[2].shape)
+            print("CurIndex_UV which is output[0]",output[0])
+            print("nonzero values in output[0] matrix:")
+            rows, cols = np.nonzero(output[0])
+            print(output[0][rows, cols])
+            print("output U for part ID 1",output[1, 1])
+            print("output V for part ID 1",output[2, 1])
             ####
             All_Coords_Old = All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]
             All_Coords_Old[All_Coords_Old==0]=output.transpose([1,2,0])[All_Coords_Old==0]
             All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]= All_Coords_Old
             ###
-            CurrentMask = (output[0,:,:]>0).astype(np.float32)
+            #CurrentMask = (output[0,:,:]>0).astype(np.float32)
+            CurrentMask = (output[0,:,:]==3).astype(np.float32)
             All_inds_old = All_inds[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2]]
             All_inds_old[All_inds_old==0] = CurrentMask[All_inds_old==0]*i
             All_inds[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2]] = All_inds_old
@@ -407,21 +436,44 @@ def vis_one_image(
     All_Coords[All_Coords>255] = 255.
     All_Coords = All_Coords.astype(np.uint8)
     All_inds = All_inds.astype(np.uint8)
-    #
-    IUV_SaveName = os.path.basename(im_name).split('.')[0]+'_IUV.png'
-    INDS_SaveName = os.path.basename(im_name).split('.')[0]+'_INDS.png'
-    cv2.imwrite(os.path.join(output_dir, '{}'.format(IUV_SaveName)), All_Coords )
-    cv2.imwrite(os.path.join(output_dir, '{}'.format(INDS_SaveName)), All_inds )
-    print('IUV written to: ' , os.path.join(output_dir, '{}'.format(IUV_SaveName)) )
-    ###
-    ### DensePose Visualization Done!!
-    #
+    print("All_Coords",All_Coords.shape)
+    print("All_inds",All_inds.shape)
+    #draw frame and contours to canvas
+    # Adapted from https://github.com/trrahul/densepose-video
+    #plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1 )
+    #plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1 )
+    plt.contour( All_inds, linewidths = 3 )    
+    # PMB
+    #partMask = (output[0,:,:]==1).astype(np.float32)
+    #plt.contour( partMask, linewidths = 3 )    
+    plt.axis('off') ; 
+    fig.canvas.draw()
+    # convert canvas to image
+    img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    # img is rgb, convert to opencv's default bgr
+    img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
+    # display image with opencv
+    #cv2.imshow("plot",img)
+    #cv2.waitKey(1)
+    #print('\t-Visualized in {: .3f}s'.format(time.time() - optime))
     output_name = os.path.basename(im_name) + '.' + ext
-    fig.savefig(os.path.join(output_dir, '{}'.format(output_name)), dpi=dpi)
+    #filetime = time.time()
+    #out_file = 'file%02d.png' % frame_no
+    #fig.savefig(os.path.join(out_dir, out_file), dpi=dpi)
+    #fig.savefig(os.path.join(output_dir, '{}'.format(output_name)), dpi=dpi)
+    fig.savefig(out_path, dpi=dpi)
     plt.close('all')
 
+    #theFig = cv2.imread(out_path)
+    #cv2.addWeighted(All_Coords, 0.25, theFig, .75, 0, theFig)
+    #cv2.imwrite(out_path, theFig)
+
+    return True
+    ### DensePose Visualization Done!!
+
 #PMB
-def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, body_uv=None, dataset=None, box_alpha=0.3, show_class=False):
+def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, body_uv=None, dataset=None, box_alpha=0.3, show_class=True):
 
     thresh=0.9
     kp_thresh=2
@@ -451,6 +503,20 @@ def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, bo
     if boxes is None or boxes.shape[0] == 0 or max(boxes[:, 4]) < thresh:
         fig.savefig(out_path, dpi=dpi)
         return
+
+    #print("size of body_uv",len(body_uv))
+    #print("size of body_uv[0]",len(body_uv[0]))
+    #print("size of body_uv[1]",len(body_uv[1]))
+    # structure should be u: [part_index][u_coords], v: [part_index][v_coords]
+    # body_uv[0] is empty -- maybe that's the annotations?
+    # body_uv[1] is an array with 20 elements -- maybe these are the patch indices?
+    # each element has 3 sub-elements. Assuming they have identical structure.
+    # Each of the 3 sub-elements has the same (large) number of elements, each
+    # of which seems to be an array, so the sub-arrays could be corresponding
+    # I, U, V values
+    print(len(body_uv[1][0][0]), len(body_uv[1][0][1]), len(body_uv[1][0][2]))
+    print(len(body_uv[1][0][0][0]), len(body_uv[1][0][1][0]), len(body_uv[1][0][2][0]))
+
 
     # Display in largest to smallest order to reduce occlusion
     areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -560,14 +626,15 @@ def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, bo
     
     All_Coords = np.zeros(im.shape)
     All_inds = np.zeros([im.shape[0],im.shape[1]])
-    K = 26
     inds = np.argsort(boxes[:,4])
+    print("inds",str(inds))
     for i, ind in enumerate(inds):
         entry = boxes[ind,:]
         if entry[4] > 0.65:
             entry=entry[0:4].astype(int)
             ####
             output = IUV_fields[ind]
+            print("output shape",output.shape)
             ####
             All_Coords_Old = All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]
             All_Coords_Old[All_Coords_Old==0]=output.transpose([1,2,0])[All_Coords_Old==0]
@@ -582,6 +649,17 @@ def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, bo
     All_Coords[All_Coords>255] = 255.
     All_Coords = All_Coords.astype(np.uint8)
     All_inds = All_inds.astype(np.uint8)
+    #for y in range(0,All_Coords.shape[0]):
+    #    for x in range(0,All_Coords.shape[1]):
+    #        r = All_Coords[y][x][0]
+    #        g = All_Coords[y][x][1]
+    #        b = All_Coords[y][x][2]
+    #        if (r != g != b != 0):
+    #            #print("rgb for",x,y,"is",r,g,b)
+    #            plt.plot(x, y, '.', color='blue', markersize=1.0, alpha=0.5)
+
+    print("All_Coords dim",All_Coords.shape)
+    #plt.plot(kps[0, i2], kps[1, i2], '.', color=colors[l], markersize=3.0, alpha=0.7)
     
     #IUV_SaveName = os.path.basename(im_name).split('.')[0]+'_IUV.png'
     #INDS_SaveName = os.path.basename(im_name).split('.')[0]+'_INDS.png'
@@ -596,12 +674,7 @@ def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, bo
     fig.savefig(out_path, dpi=dpi)
     plt.close('all')
     theFig = cv2.imread(out_path)
-    IUVoverlay = theFig.copy()
-    INDSoverlay = theFig.copy()
-
-    cv2.addWeighted(IUVoverlay, 0.25, theFig, .75, 0, theFig)
-    cv2.addWeighted(INDSoverlay, 0.25, theFig, .75, 0, theFig)
-
+    cv2.addWeighted(All_Coords, 0.25, theFig, .75, 0, theFig)
     cv2.imwrite(out_path, theFig)
 
 
