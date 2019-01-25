@@ -383,9 +383,9 @@ def vis_one_image(
                 
     #   DensePose Visualization Starts!!
     ##  Get full IUV image out 
-    print("body_uv length",len(body_uv))
+    #print("body_uv length",len(body_uv))
     IUV_fields = body_uv[1]
-    print("IUV_fields length",len(IUV_fields))
+    #print("IUV_fields length",len(IUV_fields))
     #
     All_Coords = np.zeros(im.shape)
     All_inds = np.zeros([im.shape[0],im.shape[1]])
@@ -393,15 +393,14 @@ def vis_one_image(
     ##
     inds = np.argsort(boxes[:,4])
     ##
-    print("inds shape",inds.shape)
+    #print("inds shape",inds.shape)
     # Loop through top "body" candidates
     for i, ind in enumerate(inds):
-        print("ind is",ind)
+        #print("ind is",ind)
         #if (ind != 0):
         #    continue
 
         entry = boxes[ind,:]
-        # Loop through the mesh patches on the bodies?
         # See https://github.com/facebookresearch/DensePose/blob/master/challenge/2018_COCO_DensePose/data_format.md
         # 1, 2 = Torso, 3 = Right Hand, 4 = Left Hand, 5 = Left Foot, 6 = Right Foot, 7, 9 = Upper Leg Right, 8, 10 = Upper Leg Left, 11, 13 = Lower Leg Right, 12, 14 = Lower Leg Left, 15, 17 = Upper Arm Left, 16, 18 = Upper Arm Right, 19, 21 = Lower Arm Left, 20, 22 = Lower Arm Right, 23, 24 = Head
         # Consider using scipy.ndimage.measurements.center_of_mass() to find
@@ -411,55 +410,35 @@ def vis_one_image(
             entry=entry[0:4].astype(int)
             ####
             output = IUV_fields[ind]
-            print("shape of IUV_fields for this body:",output.shape)
-            print("Shape of output[0]",output[0].shape)
-            print("Shape of output[1]",output[1].shape)
-            print("Shape of output[2]",output[2].shape)
-            print("CurIndex_UV which is output[0]",output[0])
-            print("nonzero values in output[0] matrix:")
             rows, cols = np.nonzero(output[0])
-            print(output[0][rows, cols])
-            print("output U for part ID 1",output[1, 1])
-            print("output V for part ID 1",output[2, 1])
             ####
             All_Coords_Old = All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]
             All_Coords_Old[All_Coords_Old==0]=output.transpose([1,2,0])[All_Coords_Old==0]
             All_Coords[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2],:]= All_Coords_Old
             ###
-            #CurrentMask = (output[0,:,:]>0).astype(np.float32)
-            CurrentMask = (output[0,:,:]==3).astype(np.float32)
+            CurrentMask = (output[0,:,:]>0).astype(np.float32)
+            #CurrentMask = (output[0,:,:]==3).astype(np.float32)
             All_inds_old = All_inds[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2]]
             All_inds_old[All_inds_old==0] = CurrentMask[All_inds_old==0]*i
             All_inds[ entry[1] : entry[1]+output.shape[1],entry[0]:entry[0]+output.shape[2]] = All_inds_old
-    #
     All_Coords[:,:,1:3] = 255. * All_Coords[:,:,1:3]
     All_Coords[All_Coords>255] = 255.
     All_Coords = All_Coords.astype(np.uint8)
     All_inds = All_inds.astype(np.uint8)
-    print("All_Coords",All_Coords.shape)
-    print("All_inds",All_inds.shape)
     #draw frame and contours to canvas
     # Adapted from https://github.com/trrahul/densepose-video
-    #plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1 )
-    #plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1 )
+    plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1 )
+    plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1 )
     plt.contour( All_inds, linewidths = 3 )    
     # PMB
-    #partMask = (output[0,:,:]==1).astype(np.float32)
-    #plt.contour( partMask, linewidths = 3 )    
     plt.axis('off') ; 
     fig.canvas.draw()
     # convert canvas to image
-    img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-    img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    #img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    #img = img.reshape(fig.canvas.get_width_height()[::-1] + (3,))
     # img is rgb, convert to opencv's default bgr
-    img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
-    # display image with opencv
-    #cv2.imshow("plot",img)
-    #cv2.waitKey(1)
-    #print('\t-Visualized in {: .3f}s'.format(time.time() - optime))
-    output_name = os.path.basename(im_name) + '.' + ext
-    #filetime = time.time()
-    #out_file = 'file%02d.png' % frame_no
+    #img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
+    #output_name = os.path.basename(im_name) + '.' + ext
     #fig.savefig(os.path.join(out_dir, out_file), dpi=dpi)
     #fig.savefig(os.path.join(output_dir, '{}'.format(output_name)), dpi=dpi)
     fig.savefig(out_path, dpi=dpi)
@@ -676,6 +655,3 @@ def vis_only_figure(im, im_name, out_path, boxes, segms=None, keypoints=None, bo
     theFig = cv2.imread(out_path)
     cv2.addWeighted(All_Coords, 0.25, theFig, .75, 0, theFig)
     cv2.imwrite(out_path, theFig)
-
-
-
