@@ -1,5 +1,8 @@
 cmake_minimum_required(VERSION 2.8.12 FATAL_ERROR)
 
+#PMB
+set(Caffe2_DIR, "/usr/local/lib/python2.7/dist-packages/torch/share/cmake/Caffe2/")
+
 # Find the Caffe2 package.
 # Caffe2 exports the required targets, so find_package should work for
 # the standard Caffe2 installation. If you encounter problems with finding
@@ -34,7 +37,14 @@ add_library(
      caffe2_detectron_custom_ops SHARED
      ${CUSTOM_OPS_CPU_SRCS})
 
-target_link_libraries(caffe2_detectron_custom_ops caffe2_library)
+# PMB
+#target_link_libraries(caffe2_detectron_custom_ops caffe2_library)
+# static protobuf library
+add_library(libprotobuf STATIC IMPORTED)
+set(PROTOBUF_LIB "/home/broadwell/software/c2_tp_protobuf/lib/libprotobuf.a")
+set_property(TARGET libprotobuf PROPERTY IMPORTED_LOCATION "${PROTOBUF_LIB}")
+target_link_libraries(caffe2_detectron_custom_ops caffe2_library libprotobuf)
+
 install(TARGETS caffe2_detectron_custom_ops DESTINATION lib)
 
 # Install custom GPU ops lib, if gpu is present.
@@ -47,6 +57,7 @@ if (CAFFE2_USE_CUDA OR CAFFE2_FOUND_CUDA)
       ${CUSTOM_OPS_CPU_SRCS}
       ${CUSTOM_OPS_GPU_SRCS})
 
-  target_link_libraries(caffe2_detectron_custom_ops_gpu caffe2_gpu_library)
+  #PMB
+  target_link_libraries(caffe2_detectron_custom_ops_gpu caffe2_gpu_library libprotobuf)
   install(TARGETS caffe2_detectron_custom_ops_gpu DESTINATION lib)
 endif()

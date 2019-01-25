@@ -49,6 +49,8 @@ c2_utils.import_detectron_ops()
 # thread safe and causes unwanted GPU memory allocations.
 cv2.ocl.setUseOpenCL(False)
 
+save_work = False
+vis_figures = True
 
 def parse_args():
     parser = argparse.ArgumentParser(description='End-to-end inference')
@@ -69,7 +71,7 @@ def parse_args():
     parser.add_argument(
         '--output-dir',
         dest='output_dir',
-        help='directory for visualization pdfs (default: /tmp/infer_simple)',
+        help='directory for visualization files (default: /tmp/infer_simple)',
         default='/tmp/infer_simple',
         type=str
     )
@@ -125,36 +127,23 @@ def main(args):
     videofile = args.video
     videoID = os.path.basename(videofile).split('.')[0].replace('video-','')
 
-    if (not os.path.isdir('DensePoseData/figuresRawOutput/' + videoID)):
+    if (save_work and (not os.path.isdir('DensePoseData/figuresRawOutput/' + videoID))):
         os.mkdir('DensePoseData/figuresRawOutput/' + videoID)
 
     cap = cv2.VideoCapture(videofile)
-    #cap = Video(fideofile)
-    #cap = imageio.get_reader(videofile, 'ffmpeg')
-    #metadata = cap.get_meta_data()
-    #print(str(metadata))
-
-    #print("series length",cap.get_length())
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    #total_frames = int(cap.frame_count())
-    #total_frames = int(metadata['nframes'])
 
     dataset_keypoints, _ = keypoint_utils.get_keypoints()
     kp_lines = vis_utils.kp_connections(dataset_keypoints)
 
-    figuresFilename = 'DensePoseData/figuresJSON/' + '.'.join(os.path.basename(videofile).replace('video-','').split('.')[0:-1]) + "_figures.json"
+    figuresFilename = 'figuresJSON/' + '.'.join(os.path.basename(videofile).replace('video-','').split('.')[0:-1]) + "_figures.json"
     print("figures JSON file is",figuresFilename)
 
     targetFramerate = 30
     thresh = .9 # minimum likelihood threshold for a box
 
     fps = cap.get(cv2.CAP_PROP_FPS)
-    #fps = metadata['fps']
-    #calcfps = float(total_frames) / float(metadata['duration'])
-    #print("fps and calcpfs",fps,calcfps)
-
-    #print("Input FPS",fps)
 
     if (targetFramerate > fps):
         targetFramerate = fps
@@ -172,10 +161,6 @@ def main(args):
 
     firstFrame = True
 
-    #if (cap.isOpened() == False):
-    #    print("Error opening video stream or file")
-    #    sys.exit(1)
-
     outputTimecode = 0
     sourceTimecode = 0
 
@@ -183,14 +168,18 @@ def main(args):
 
     i = 0
 
+    in_retry = False
+
     while(cap.isOpened() and (frameCount < total_frames)):
-    #for i in np.arange(total_frames):
-    #for i, im in cap.iter_data():
-    #for i, im in enumerate(cap):
-    #for i in range(0, total_frames):
         ret_val, im = cap.read()
-        #im = cap.get_index_frame(i)
-        #im = cap.get_data(i)
+
+        if (im is None):
+            in_retry = True
+            ret_val, im = cap.read()
+            if (im is None):
+                print("Consecutive failures to retrieve frame, quitting.")
+                break
+            in_retry = False
 
         imHeight, imWidth, imChannels = im.shape
 
@@ -199,7 +188,6 @@ def main(args):
         sourceTimecode += sourceFrameDuration
 
         frameId = int(round(cap.get(1)))
-        #frameId = i
 
         if ((frameCount % skipRatio) != 0):
 
@@ -213,10 +201,9 @@ def main(args):
 
         outputTimecode += outputFrameDuration
 
-        fps_time = time.time()
-
+        #fps_time = time.time()
         #im_name = str(fps_time)
-        im_name = str(outputTimecode) + "_" + str(frameId) + "_" + videoID
+        im_name = str(frameId).zfill(4) + "_" + str(outputTimecode) + "_" + videoID
         
         out_path = os.path.join(
             args.output_dir, '{}'.format(im_name + '.jpg')
@@ -241,7 +228,8 @@ def main(args):
             )
         i += 1
 
-        joblib.dump([cls_boxes, cls_segms, cls_keyps, cls_bodys], datafile_name, compress=True)
+        if (save_work):
+            joblib.dump([cls_boxes, cls_segms, cls_keyps, cls_bodys], datafile_name, compress=True)
 
         figBoxes = []
         figOutlines = []
@@ -308,6 +296,10 @@ def main(args):
             else:
                 figuresFile.write(outStr + "\n")
                 firstFrame = False
+        
+        if (not vis_figures): 
+            continue
+
         """
         vis_utils.vis_only_figure(
             im[:, :, ::-1],  # BGR -> RGB for visualization
@@ -323,12 +315,10 @@ def main(args):
         )
         """
 
-
-        """
         vis_utils.vis_one_image(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
-            args.output_dir,
+            out_path,
             cls_boxes,
             cls_segms,
             cls_keyps,
@@ -339,7 +329,6 @@ def main(args):
             thresh=0.7,
             kp_thresh=2
         )
-        """
 
         #cv2.putText(im,
         #            "FPS: %f" % (1.0 / (time.time() - fps_time)),
