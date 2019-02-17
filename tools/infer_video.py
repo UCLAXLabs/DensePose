@@ -51,6 +51,9 @@ cv2.ocl.setUseOpenCL(False)
 
 save_work = False
 vis_figures = True
+# 132556_4422.95186666
+start_time_in_secs = 0 # Number of seconds to skip at start of video
+start_frame = 0 # Start ON this frame, not after
 
 def parse_args():
     parser = argparse.ArgumentParser(description='End-to-end inference')
@@ -155,11 +158,11 @@ def main(args):
     outputFrameDuration = 1 / float(targetFramerate) # .0333333 ...
     sourceFrameDuration = 1 / float(fps) # .016672224 ...
 
-    with open(figuresFilename, "w") as figuresFile:
-        figuresFile.write("[\n")
-    figuresFile.close()
-
-    firstFrame = True
+    firstFrame = False
+    if (not os.path.exists(figuresFilename)):
+        with open(figuresFilename, "w") as figuresFile:
+            figuresFile.write("[\n")
+        firstFrame = True
 
     outputTimecode = 0
     sourceTimecode = 0
@@ -179,6 +182,7 @@ def main(args):
             if (im is None):
                 print("Consecutive failures to retrieve frame, quitting.")
                 break
+            print("Missed a frame, continuing...")
             in_retry = False
 
         imHeight, imWidth, imChannels = im.shape
@@ -200,6 +204,12 @@ def main(args):
         print("processing frame",frameId,"count",frameCount)
 
         outputTimecode += outputFrameDuration
+        
+        if (outputTimecode <= start_time_in_secs):
+            continue
+
+        if (frameCount < start_frame):
+            continue
 
         #fps_time = time.time()
         #im_name = str(fps_time)
@@ -208,7 +218,7 @@ def main(args):
         out_path = os.path.join(
             args.output_dir, '{}'.format(im_name + '.jpg')
         )
-        
+
         datafile_name = 'DensePoseData/figuresRawOutput/' + videoID + '/' + str(outputTimecode) + "_" + str(frameId) + "_" + videoID + '.joblib'
 
         logger.info('Processing {}'.format(im_name))
@@ -287,7 +297,8 @@ def main(args):
 
                     figKeypoints.append(keypointInfo)
 
-        timeFigures = {str(outputTimecode): {'frameID': str(frameId), 'boxes': figBoxes, 'outlines': figOutlines, 'keypoints': figKeypoints}}
+        #timeFigures = {str(outputTimecode): {'frameID': str(frameId), 'boxes': figBoxes, 'outlines': figOutlines, 'keypoints': figKeypoints}}
+        timeFigures = {str(outputTimecode): {'frameID': str(frameId), 'boxes': figBoxes, 'keypoints': figKeypoints}}
 
         with open(figuresFilename, "a") as figuresFile:
             outStr = json.dumps(timeFigures)
@@ -319,10 +330,11 @@ def main(args):
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
             out_path,
-            cls_boxes,
-            cls_segms,
-            cls_keyps,
+            boxes,
+            segms,
+            keyps,
             cls_bodys,
+            classes,
             dataset=dummy_coco_dataset,
             box_alpha=0.3,
             show_class=True,

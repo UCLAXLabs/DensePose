@@ -28,6 +28,7 @@ import numpy as np
 import json
 import pycocotools.mask as mask_util
 import joblib
+#from sklearn.externals import joblib
 
 import detectron.datasets.dummy_datasets as dummy_datasets
 import detectron.utils.vis as vis_utils
@@ -52,14 +53,21 @@ def parse_args():
     parser.add_argument(
         '--video',
         dest="video",
-        help='video file prefix', 
+        help='input video file (needed to get original image for overlays)', 
+        default=None,
+        type=str
+    )
+    parser.add_argument(
+        '--video-data',
+        dest="video_path",
+        help='path to folder containing per-frame inference output data in .pkl format', 
         default=None,
         type=str
     )
     parser.add_argument(
         '--average-frames',
         dest="average_frames",
-        help='average figure detections in grayscale and output at end', 
+        help='average figure detections in grayscale and save', 
         default=False,
         type=bool
     )
@@ -95,14 +103,13 @@ def main(args):
         print("Unable to find video file",args.video)
         sys.exit(1)
 
-    videofile = args.video
-    videoID = os.path.basename(videofile).split('.')[0].replace('video-','')
+    videoID = args.video_path.strip('/').split('/')[-1]
 
-    if (not os.path.isdir('DensePoseData/figuresRawOutput/' + videoID)):
-        print("Unable to find video output files",args.video)
+    if (not os.path.isdir(args.video_path)):
+        print("Unable to find video output files",args.video_path)
         sys.exit(1)
 
-    cap = cv2.VideoCapture(videofile)
+    cap = cv2.VideoCapture(args.video)
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 
@@ -168,7 +175,7 @@ def main(args):
             args.output_dir, '{}'.format(im_name + '.jpg')
         )
         
-        datafile_name = 'DensePoseData/figuresRawOutput/' + videoID + '/' + str(outputTimecode) + "_" + str(frameId) + "_" + videoID + '.joblib'
+        datafile_name = args.video_path + '/' + str(outputTimecode) + "_" + str(frameId) + "_" + videoID + '.joblib'
 
         logger.info('Processing {}'.format(im_name))
             
@@ -258,7 +265,6 @@ def main(args):
             cls_bodys,
             classes,
             dataset=dummy_coco_dataset,
-            dpi=300,
             box_alpha=0.3,
             show_class=True,
             thresh=0.7,
