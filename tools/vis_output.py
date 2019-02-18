@@ -154,7 +154,15 @@ def main(args):
     while(cap.isOpened() and (frameCount < total_frames)):
         ret_val, im = cap.read()
 
-        imHeight, imWidth, imChannels = im.shape
+        try:
+            imHeight, imWidth, imChannels = im.shape
+        except:
+            try:
+                ret_val, im = cap.read()
+                imHeight, imWidth, imChannels = im.shape
+            except:
+                print("Reached end of video before expected")
+                break
 
         if (firstFrame and args.average_frames):
             average_frame = np.zeros((imWidth,imHeight,3),np.float)
@@ -233,13 +241,15 @@ def main(args):
 
         #timeFigures = {str(outputTimecode): {'frameID': str(frameId), 'boxes': figBoxes, 'outlines': figOutlines, 'keypoints': figKeypoints}}
 
-        #with open(figuresFilename, "a") as figuresFile:
-        #    outStr = json.dumps(timeFigures)
-        #    if (not firstFrame):
-        #        figuresFile.write("," + outStr + "\n")
-        #    else:
-        #        figuresFile.write(outStr + "\n")
-        #        firstFrame = False
+        if (not firstFrame):
+            pass
+            #with open(figuresFilename, "a") as figuresFile:
+            #    outStr = json.dumps(timeFigures)
+            #        figuresFile.write("," + outStr + "\n")
+        else:
+            firstFrame = False
+            #        figuresFile.write(outStr + "\n")
+
         """
         vis_utils.vis_only_figure(
             im[:, :, ::-1],  # BGR -> RGB for visualization
@@ -287,8 +297,6 @@ def main(args):
         if (args.average_frames):
             average_frame = average_frame + vis_image/total_frames
 
-
-
         #cv2.putText(im,
         #            "FPS: %f" % (1.0 / (time.time() - fps_time)),
         #            (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
@@ -304,10 +312,10 @@ def main(args):
     #    figuresFile.write("]")
 
     if (args.average_frames):
-        average_frame=numpy.array(numpy.round(average-frames),dtype=numpy.uint8)
+        average_frame=numpy.array(numpy.round(average_frame),dtype=numpy.uint8)
         out=Image.fromarray(average_frame,mode="RGB")
         out.save(videoID + "_average.png")
-        
+ 
 
 if __name__ == '__main__':
     args = parse_args()
