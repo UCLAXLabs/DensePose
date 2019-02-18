@@ -37,6 +37,7 @@ plt.rcParams['pdf.fonttype'] = 42  # For editing in Adobe Illustrator
 _GRAY = (218, 227, 218)
 _GREEN = (18, 127, 15)
 _WHITE = (255, 255, 255)
+_BLACK = (0, 0, 0)
 
 
 def kp_connections(keypoints):
@@ -358,6 +359,9 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
             img = np.ones(im.shape)
             color_mask = color_list[mask_color_id % len(color_list), 0:3]
             mask_color_id += 1
+            
+            e = masks[:, :, i]
+            _, contour, hier = cv2.findContours(e.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
 
             if (not grayscale):
                 w_ratio = .4
@@ -365,20 +369,31 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
                     color_mask[c] = color_mask[c] * (1 - w_ratio) + w_ratio
                 for c in range(3):
                     img[:, :, c] = color_mask[c]
-            e = masks[:, :, i]
 
-            _, contour, hier = cv2.findContours(
-                e.copy(), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_NONE)
+                edgecolor='w'
+                mask_alpha=0.5
+                fill_mask=True
+            else:
+                edgecolor='k'
+                mask_alpha=1
+                fill_mask=False
 
             for c in contour:
                 polygon = Polygon(
                     c.reshape((-1, 2)),
-                    fill=True, facecolor=color_mask,
-                    edgecolor='w', linewidth=1.2,
-                    alpha=0.5)
+                    fill=fill_mask, facecolor=color_mask,
+                    edgecolor=edgecolor, linewidth=1.2,
+                    alpha=mask_alpha)
                 ax.add_patch(polygon)
 
         # show keypoints
+        if (grayscale):
+            kp_linewidth=2.0
+            kp_alpha=1.0
+        else:
+            kp_linewidth=1.0
+            kp_alpha=0.7
+
         if keypoints is not None and len(keypoints) > i:
             kps = keypoints[i]
             plt.autoscale(False)
@@ -389,16 +404,16 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
                     x = [kps[0, i1], kps[0, i2]]
                     y = [kps[1, i1], kps[1, i2]]
                     line = plt.plot(x, y)
-                    plt.setp(line, color=colors[l], linewidth=1.0, alpha=0.7)
+                    plt.setp(line, color=colors[l], linewidth=kp_linewidth, alpha=kp_alpha)
                 if kps[2, i1] > kp_thresh:
                     plt.plot(
                         kps[0, i1], kps[1, i1], '.', color=colors[l],
-                        markersize=3.0, alpha=0.7)
+                        markersize=3.0, alpha=kp_alpha)
 
                 if kps[2, i2] > kp_thresh:
                     plt.plot(
                         kps[0, i2], kps[1, i2], '.', color=colors[l],
-                        markersize=3.0, alpha=0.7)
+                        markersize=3.0, alpha=kp_alpha)
 
             # add mid shoulder / mid hip for better visualization
             mid_shoulder = (
@@ -419,14 +434,14 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
                 y = [mid_shoulder[1], kps[1, dataset_keypoints.index('nose')]]
                 line = plt.plot(x, y)
                 plt.setp(
-                    line, color=colors[len(kp_lines)], linewidth=1.0, alpha=0.7)
+                    line, color=colors[len(kp_lines)], linewidth=kp_linewidth, alpha=kp_alpha)
             if sc_mid_shoulder > kp_thresh and sc_mid_hip > kp_thresh:
                 x = [mid_shoulder[0], mid_hip[0]]
                 y = [mid_shoulder[1], mid_hip[1]]
                 line = plt.plot(x, y)
                 plt.setp(
-                    line, color=colors[len(kp_lines) + 1], linewidth=1.0,
-                    alpha=0.7)
+                    line, color=colors[len(kp_lines) + 1], linewidth=kp_linewidth,
+                    alpha=kp_alpha)
                 
     #   DensePose Visualization Starts!!
     ##  Get full IUV image out 
@@ -476,14 +491,14 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
     # Adapted from https://github.com/trrahul/densepose-video
 
     if (grayscale):
-        plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1, color='black' )
-        plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1, color='black' )
+        plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1, colors='black' )
+        plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1, colors='black' )
     else:
         plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1 )
         plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1 )
     try:
         if (grayscale):
-            plt.contour( All_inds, linewidths = 3, color='black' )
+            plt.contour( All_inds, linewidths = 1, colors='black' )
         else:
             plt.contour( All_inds, linewidths = 3 )
     except:

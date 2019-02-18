@@ -28,6 +28,7 @@ import numpy as np
 import json
 import pycocotools.mask as mask_util
 import joblib
+from PIL import Image
 #from sklearn.externals import joblib
 
 import detectron.datasets.dummy_datasets as dummy_datasets
@@ -46,8 +47,8 @@ def parse_args():
     parser.add_argument(
         '--output-dir',
         dest='output_dir',
-        help='directory for visualization files (default: /tmp/infer_simple)',
-        default='/tmp/infer_simple',
+        help='directory for visualization files (default: /srv/Top_N_Kpop/inferenceVis)',
+        default='/srv/Top_N_Kpop/inferenceVis',
         type=str
     )
     parser.add_argument(
@@ -111,6 +112,10 @@ def main(args):
         print("Unable to find video output files",video_path)
         sys.exit(1)
 
+    out_dir = os.path.join(args.output_dir, videoID)
+    if (not os.path.isdir(out_dir)):
+        os.mkdir(out_dir)
+
     cap = cv2.VideoCapture(args.video)
 
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -151,6 +156,9 @@ def main(args):
 
         imHeight, imWidth, imChannels = im.shape
 
+        if (firstFrame and args.average_frames):
+            average_frame = np.zeros((imWidth,imHeight,3),np.float)
+
         frameCount += 1
 
         sourceTimecode += sourceFrameDuration
@@ -174,7 +182,7 @@ def main(args):
         im_name = str(frameId).zfill(4) + "_" + str(outputTimecode) + "_" + videoID
         
         out_path = os.path.join(
-            args.output_dir, '{}'.format(im_name + '.jpg')
+            out_dir, '{}'.format(im_name + '.jpg')
         )
         
         datafile_name = video_path + '/' + str(outputTimecode) + "_" + str(frameId) + "_" + videoID + '.joblib'
@@ -257,7 +265,7 @@ def main(args):
           show_background = True
           return_grayscale = False
 
-        vis_utils.vis_one_image(
+        vis_image = vis_utils.vis_one_image(
             im[:, :, ::-1],  # BGR -> RGB for visualization
             im_name,
             out_path,
@@ -276,6 +284,11 @@ def main(args):
             grayscale=return_grayscale
         )
 
+        if (args.average_frames):
+            average_frame = average_frame + vis_image/total_frames
+
+
+
         #cv2.putText(im,
         #            "FPS: %f" % (1.0 / (time.time() - fps_time)),
         #            (10, 10),  cv2.FONT_HERSHEY_SIMPLEX, 0.5,
@@ -289,6 +302,12 @@ def main(args):
     cap.release()
     #with open(figuresFilename, "a") as figuresFile:
     #    figuresFile.write("]")
+
+    if (args.average_frames):
+        average_frame=numpy.array(numpy.round(average-frames),dtype=numpy.uint8)
+        out=Image.fromarray(average_frame,mode="RGB")
+        out.save(videoID + "_average.png")
+        
 
 if __name__ == '__main__':
     args = parse_args()
