@@ -263,7 +263,7 @@ def vis_one_image_opencv(
     return im
 
 # PMB modified as well
-def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body_uv=None, classes=None, thresh=0.9, kp_thresh=2, dpi=80, box_alpha=0.0, dataset=None, show_class=False, show_box=True, show_background=True, return_grayscale=False):
+def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body_uv=None, classes=None, thresh=0.9, kp_thresh=2, dpi=80, box_alpha=0.0, dataset=None, show_class=False, show_box=True, show_background=True, grayscale=False):
 
     """Visual debugging of detections."""
     #if not os.path.exists(output_dir):
@@ -274,11 +274,12 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
     #        boxes, segms, keypoints)
 
     fig = plt.figure(frameon=False)
-    fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
 
-    print("Size of input figure as numpy array is",im.shape)
-    fig_array = fig2data(fig)
-    print("Size of matplotlib figure as numpy array is",fig_array.shape)
+    default_dpi = fig.get_dpi()
+    print("Default figure DPI:",default_dpi)
+    dpi = default_dpi
+
+    fig.set_size_inches(im.shape[1] / dpi, im.shape[0] / dpi)
 
     ax = plt.Axes(fig, [0., 0., 1., 1.])
     ax.axis('off')
@@ -286,21 +287,41 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
 
     if (show_background):
         ax.imshow(im)
+    else:
+        blank_im = np.ones(im.shape)
+        ax.imshow(blank_im)
+ 
+    print("Size of input figure as numpy array is",im.shape)
+    fig_array = fig2data(fig)
+    print("Size of matplotlib figure as numpy array is",fig_array.shape)
 
     if boxes is None or boxes.shape[0] == 0 or max(boxes[:, 4]) < thresh:
+        print("No figures detected, returning original image")
         fig.savefig(out_path, dpi=dpi)
-        return
+        return fig_array
 
     dataset_keypoints, _ = keypoint_utils.get_keypoints()
 
     if segms is not None and len(segms) > 0:
         masks = mask_util.decode(segms)
 
-    color_list = colormap(rgb=True) / 255
+    if (grayscale):
+        color_list = np.array([0.000, 0.000, 0.000]).astype(np.float32)
+        color_list = color_list.reshape((-1, 3)) * 255
+    else:
+        color_list = colormap(rgb=True) / 255
 
     kp_lines = kp_connections(dataset_keypoints)
-    cmap = plt.get_cmap('rainbow')
-    colors = [cmap(i) for i in np.linspace(0, 1, len(kp_lines) + 2)]
+
+    if (grayscale):
+        cmap = plt.get_cmap('gray')
+    else:
+        cmap = plt.get_cmap('rainbow')
+
+    if (grayscale):
+        colors = [[0,0,0] for i in np.linspace(0, 1, len(kp_lines) + 2)]
+    else:
+        colors = [cmap(i) for i in np.linspace(0, 1, len(kp_lines) + 2)]
 
     # Display in largest to smallest order to reduce occlusion
     areas = (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -334,16 +355,16 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
 
         # show mask
         if segms is not None and len(segms) > i:
-            print("Drawing mask")
             img = np.ones(im.shape)
             color_mask = color_list[mask_color_id % len(color_list), 0:3]
             mask_color_id += 1
 
-            w_ratio = .4
-            for c in range(3):
-                color_mask[c] = color_mask[c] * (1 - w_ratio) + w_ratio
-            for c in range(3):
-                img[:, :, c] = color_mask[c]
+            if (not grayscale):
+                w_ratio = .4
+                for c in range(3):
+                    color_mask[c] = color_mask[c] * (1 - w_ratio) + w_ratio
+                for c in range(3):
+                    img[:, :, c] = color_mask[c]
             e = masks[:, :, i]
 
             _, contour, hier = cv2.findContours(
@@ -453,10 +474,18 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
     All_inds = All_inds.astype(np.uint8)
     #draw frame and contours to canvas
     # Adapted from https://github.com/trrahul/densepose-video
-    plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1 )
-    plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1 )
+
+    if (grayscale):
+        plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1, color='black' )
+        plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1, color='black' )
+    else:
+        plt.contour( All_Coords[:,:,1]/256.,10, linewidths = 1 )
+        plt.contour( All_Coords[:,:,2]/256.,10, linewidths = 1 )
     try:
-        plt.contour( All_inds, linewidths = 3 )
+        if (grayscale):
+            plt.contour( All_inds, linewidths = 3, color='black' )
+        else:
+            plt.contour( All_inds, linewidths = 3 )
     except:
         print("Error plotting contours")
     # PMB
@@ -472,11 +501,12 @@ def vis_one_image(im, im_name, out_path, boxes, segms=None, keypoints=None, body
     #fig.savefig(os.path.join(output_dir, '{}'.format(output_name)), dpi=dpi)
     fig.savefig(out_path, dpi=dpi)
     plt.close('all')
-    theFig = cv2.imread(out_path)
-    cv2.addWeighted(All_Coords, 0.25, theFig, .75, 0, theFig)
-    cv2.imwrite(out_path, theFig)
+    #theFig = cv2.imread(out_path)
+    #cv2.addWeighted(All_Coords, 0.25, theFig, .75, 0, theFig)
+    #cv2.imwrite(out_path, theFig)
 
-    return True
+    fig_array = fig2data(fig)
+    return fig_array
     ### DensePose Visualization Done!!
 
 #PMB

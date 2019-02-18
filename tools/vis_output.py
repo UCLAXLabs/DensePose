@@ -60,16 +60,16 @@ def parse_args():
     parser.add_argument(
         '--video-data',
         dest="video_path",
-        help='path to folder containing per-frame inference output data in .pkl format', 
+        help='path to folder with sub-folders containing pickled inference output', 
         default=None,
         type=str
     )
     parser.add_argument(
         '--average-frames',
+        help='average figure detections in grayscale and output at end',
+        action='store_true',
         dest="average_frames",
-        help='average figure detections in grayscale and save', 
-        default=False,
-        type=bool
+        default=False
     )
     if len(sys.argv) == 1:
         parser.print_help()
@@ -103,10 +103,12 @@ def main(args):
         print("Unable to find video file",args.video)
         sys.exit(1)
 
-    videoID = args.video_path.strip('/').split('/')[-1]
+    videoID = ".".join(args.video.split('/')[-1].split('.')[0:-1]).replace('video-', '')
 
-    if (not os.path.isdir(args.video_path)):
-        print("Unable to find video output files",args.video_path)
+    video_path = os.path.join(args.video_path, videoID)
+
+    if (not os.path.isdir(video_path)):
+        print("Unable to find video output files",video_path)
         sys.exit(1)
 
     cap = cv2.VideoCapture(args.video)
@@ -175,7 +177,7 @@ def main(args):
             args.output_dir, '{}'.format(im_name + '.jpg')
         )
         
-        datafile_name = args.video_path + '/' + str(outputTimecode) + "_" + str(frameId) + "_" + videoID + '.joblib'
+        datafile_name = video_path + '/' + str(outputTimecode) + "_" + str(frameId) + "_" + videoID + '.joblib'
 
         logger.info('Processing {}'.format(im_name))
             
@@ -248,7 +250,7 @@ def main(args):
           show_class = False
           show_box = False
           show_background = False
-          return_grayscale = True 
+          return_grayscale = True
         else:
           show_class = True
           show_box = True
@@ -266,9 +268,12 @@ def main(args):
             classes,
             dataset=dummy_coco_dataset,
             box_alpha=0.3,
-            show_class=True,
+            show_class=show_class,
+            show_box=show_box,
+            show_background=show_background,
             thresh=0.7,
-            kp_thresh=2
+            kp_thresh=2,
+            grayscale=return_grayscale
         )
 
         #cv2.putText(im,
