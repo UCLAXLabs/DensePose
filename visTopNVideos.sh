@@ -20,6 +20,6 @@ for vfile in `ls -dr -1 /srv/Top_N_Kpop/videos/video-*`; do
         continue
     fi
     echo "Processing $videoFile"
-    /usr/bin/python2 tools/vis_output.py --video $vfile --video-data /srv/Top_N_Kpop/figuresRawOutput/ --average-frames > /dev/null 2>&1
+    /usr/bin/python2 tools/vis_output.py --video-data /srv/Top_N_Kpop/figuresRawOutput/ --average-frames --video $vfile > /dev/null 2>&1
     echo "Finished processing $videoFile"
 done
