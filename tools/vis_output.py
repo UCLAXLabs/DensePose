@@ -312,7 +312,7 @@ def main(args):
     #    figuresFile.write("]")
 
     if (args.average_frames):
-        average_frame=numpy.array(numpy.round(average_frame),dtype=numpy.uint8)
+        average_frame=np.array(np.round(average_frame),dtype=np.uint8)
         out=Image.fromarray(average_frame,mode="RGB")
         out.save(videoID + "_average.png")
  
