@@ -51,6 +51,7 @@ cv2.ocl.setUseOpenCL(False)
 
 save_work = False
 vis_figures = True
+save_segs = False
 # 132556_4422.95186666
 start_time_in_secs = 0 # Number of seconds to skip at start of video
 start_frame = 0 # Start ON this frame, not after
@@ -74,8 +75,8 @@ def parse_args():
     parser.add_argument(
         '--output-dir',
         dest='output_dir',
-        help='directory for visualization files (default: /tmp/infer_simple)',
-        default='/tmp/infer_simple',
+        help='directory for visualization files',
+        default='DensePoseData/frames_out',
         type=str
     )
     parser.add_argument(
@@ -213,13 +214,13 @@ def main(args):
 
         #fps_time = time.time()
         #im_name = str(fps_time)
-        im_name = str(frameId).zfill(4) + "_" + str(outputTimecode) + "_" + videoID
+        im_name = str(frameId).zfill(5) + "_" + str(outputTimecode) + "_" + videoID
         
         out_path = os.path.join(
             args.output_dir, '{}'.format(im_name + '.jpg')
         )
 
-        datafile_name = 'DensePoseData/figuresRawOutput/' + videoID + '/' + str(outputTimecode) + "_" + str(frameId) + "_" + videoID + '.joblib'
+        datafile_name = 'DensePoseData/figuresRawOutput/' + videoID + '/' + im_name + '.joblib'
 
         logger.info('Processing {}'.format(im_name))
         
@@ -259,27 +260,9 @@ def main(args):
                     continue
 
                 figBoxes.append([str(box[0]), str(box[1]), str(box[2]), str(box[3])])
-                if (len(segms) > bodyi):
+                if ((len(segms) > bodyi) and (save_segs)):
                     seg = segms[bodyi]
 
-                    # PMB This code converts the segmentation mask into a
-                    # regular (bitmap) mask, and then converts the mask into
-                    # a polygon that "lassos" (or outlines) the region -- but
-                    # both of these representations are rather cumbersome.
-                    # This is why COCO uses the weird segmentation mask format
-                    # (technically it's "compressed RLE") in the first place.
-                    # So we'll keep using it for now.
-
-                    #segHeight = int(seg['size'][0])
-                    #segWidth = int(seg['size'][1])
-                    #segMask = mask_util.decode(seg)
-
-                    #segPolygon = mask_to_polygon(segMask.copy())[0]
-                    #thisPolygon = []
-                    #for a,b in zip(segPolygon[0::2], segPolygon[1::2]):
-                    #    thisPolygon.append([str(a), str(b)])
-                    #figOutlines.append(thisPolygon)
-                    
                     figOutlines.append(str(seg))
 
                 if (len(keyps) > bodyi):
@@ -336,6 +319,7 @@ def main(args):
             cls_bodys,
             classes,
             dataset=dummy_coco_dataset,
+            dpi=300,
             box_alpha=0.3,
             show_class=True,
             thresh=0.7,
